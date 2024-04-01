@@ -11,6 +11,18 @@
 #include <set>
 #include <vector>
 
+class WrongInput : public std::exception
+{
+public:
+    const char* what() const override { return "The specified section does not exist"; }
+};
+
+class WrongFile : public std::exception
+{
+public:
+    const char* what() const override { return "There is problem with parsing"; }
+};
+
 class WrongSection : public std::exception
 {
 public:
@@ -24,81 +36,25 @@ public:
 };
 
 class ini_parser {
-private:
-    std::string filename;
-
 public:
     std::map<std::string, std::map<std::string, std::string>> parsed_file;
-    
+    std::string filename, input_variables, input_section;
 
     ini_parser(std::string filename) {
         this->filename = filename;
         this->parsing_file();
-    }
+    }    
 
-    /*void parsed_file_section_insert(std::string input) {
-        parsed_file.insert(std::pair<std::string, std::map<std::string, std::string>>(input, {}));
-    }
-    
-    void parsed_file_variable_insert(std::string section, std::string s) {
-        std::string variable, value;
-        
-        variable = s.substr(0, s.find("=", 0));
-        value = s.substr(s.find("=") + 1);
-        
-        if (value.size() != 0) {
-            parsed_file.at(section)[variable] = value;
-        }
-        
-    }*/
-
-    
     template<class T>
     T get_value(std::string input) {
-        T res;
-        std::size_t pos = input.find(".");
-        std::string input_section = input.substr(0, pos);
-        std::string input_variables = input.substr(pos+1);
-        //std::cout << "---res---" << std::endl;
-        try {
-            res = parsed_file.at(input_section).at(input_variables);
-        }        
-        catch (...) {
-            std::cout << "Error in input string "  << std::endl;
-        }
-        return res;
+        static_assert(sizeof(T) == -1, "not implemented type for get_value");
     }
-
-    template<>
-    int get_value(std::string input) {
-        int res=0;
-        std::string tmp_res;
-        size_t sz;
-        std::size_t pos = input.find(".");
-        std::string input_section = input.substr(0, pos);
-        std::string input_variables = input.substr(pos+1);
-        std::cout << "---res---" << std::endl;        
-        std::cout << input_section << "---res---"<< input_variables << std::endl;
-        try {
-            tmp_res = parsed_file.at(input_section).at(input_variables);
-        }
-        catch (...) {
-            std::cout << "Error in input string " << std::endl;         
-        }
-        try {
-            res = std::stoi(tmp_res, &sz);
-        }
-        catch (...) {
-            std::cout << "Value isn't number" << std::endl;
-        }
-        return res;
-    }
-
 
     void parsing_file() {
         std::ifstream fin(filename);
-            if (!fin.is_open())  
+        if (!fin.is_open())
             {
+                
                 std::cout << "Error opening file!\n";
             }
         std::string s;
@@ -116,7 +72,6 @@ public:
             if (pos1 != std::string::npos) {
                 s.erase(pos1);
             }
-            //std::cout << s << std::endl;
 
             if (s.size() == 0) {
 
@@ -130,8 +85,6 @@ public:
                 else { 
                     s = s.substr(1, s.size() - 2);
                     parsed_file.insert(std::pair<std::string, std::map<std::string, std::string>>(s, {}));
-                    //parsed_file_section_insert(s);
-                    //parsed_file_variable_insert(current_section, "");
                     current_section = s;
                     lines_count++;
                 }
@@ -142,7 +95,6 @@ public:
                         std::cout << "Incorrect syntax --- line " << lines_count << std::endl;
                     }
                     else {                      
-                        //parsed_file_variable_insert(current_section,  s);
                         std::string variable, value;
 
                         variable = s.substr(0, s.find("=", 0));
@@ -171,18 +123,83 @@ public:
             }
         }
     }
-    ~ini_parser() {
-        //fin.close();
+    ~ini_parser() {}
+
+private:
+
+    std::string get_value_string(std::string input) {
+        if(parsed_file.empty() == true) throw WrongFile();
+        std::string res;
+        std::size_t pos = input.find(".");
+        if (pos == std::string::npos) throw WrongInput();
+        input_section = input.substr(0, pos);
+        if (parsed_file.count(input_section) == 0) throw WrongSection();
+        input_variables = input.substr(pos + 1);
+        if (parsed_file[input_section].count(input_variables) == 0) throw WrongVariable();
+        res = parsed_file.at(input_section).at(input_variables);
+
+        return res;
     }
 };
+template<>
+std::string ini_parser::get_value(std::string input) {
+    return get_value_string(input);
+}
+
+template<>
+int ini_parser::get_value(std::string input) {
+    int res = 0;
+    std::string tmp_res = get_value_string(input);
+    size_t sz;
+    try {
+        res = std::stoi(tmp_res, &sz);
+    }
+    catch (...) {
+        std::cout << "Value isn't number" << std::endl;
+    }
+
+    return res;
+}
+
+template<>
+float ini_parser::get_value(std::string input) {
+    float res = 0;
+    std::string tmp_res = get_value_string(input);
+    size_t sz;
+    
+    try {
+        res = std::stof(tmp_res, &sz);
+    }
+    catch (...) {
+        std::cout << "Value isn't number" << std::endl;
+    }
+    return res;
+}
 
 int main()
 {
     SetConsoleCP(CP_UTF8);
     SetConsoleOutputCP(CP_UTF8);
 
+
     ini_parser parser("filename.ini");
-    auto value = parser.get_value<std::string>("Section1.var3");
-    //int value = parser.get_value<int>("Section2.var1");
-    std::cout << "\n value is " << value << std::endl;
+
+    try {
+        auto value = parser.get_value<std::string>("Section1.var3");
+        //auto value = parser.get_value<int>("Section1.var7");
+        //auto value = parser.get_value<float>("Section1.var1");
+        std::cout << "\n value is " << value << std::endl;
+    }
+    catch (const WrongInput& ex) {
+        std::cout << ex.what() << std::endl;
+    }
+    catch (const WrongSection& ex) {
+        std::cout << ex.what() << std::endl;
+    }
+    catch (const WrongVariable& ex) {
+        std::cout << ex.what() << std::endl;
+    }    
+    catch (const WrongFile& ex) {
+        std::cout << ex.what() << std::endl;
+    }
 }
