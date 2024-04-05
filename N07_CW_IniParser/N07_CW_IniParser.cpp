@@ -11,6 +11,12 @@
 #include <set>
 #include <vector>
 
+class FileOpeningProblem : public std::exception
+{
+public:
+    const char* what() const override { return "Error opening file!\n"; }
+};
+
 class WrongInput : public std::exception
 {
 public:
@@ -20,7 +26,7 @@ public:
 class WrongFile : public std::exception
 {
 public:
-    const char* what() const override { return "There is problem with parsing"; }
+    const char* what() const override { return "File couldn't be parsed - there is problem with syntax"; }
 };
 
 class WrongSection : public std::exception
@@ -33,6 +39,12 @@ class WrongVariable : public std::exception
 {
 public:
     const char* what() const override { return "There is no such variable in the specified section"; }
+};
+
+class WrongVariableValue : public std::exception
+{
+public:
+    const char* what() const override { return "Value isn't number"; }
 };
 
 class ini_parser {
@@ -52,76 +64,73 @@ public:
 
     void parsing_file() {
         std::ifstream fin(filename);
-        if (!fin.is_open())
-            {
-                
-                std::cout << "Error opening file!\n";
-            }
-        std::string s;
-        int lines_count = 0;
-        std::string current_section;
-        bool reading_variables = false;
+        if (!fin.is_open()) throw FileOpeningProblem();
+            std::string s;
+            int lines_count = 0;
+            std::string current_section;
+            bool reading_variables = false;
 
-        while (!fin.eof()) {
-            std::getline(fin, s);
-            s = s.substr(0, s.find(";", 0));
-            s.erase(0, s.find_first_not_of(" \t\n\r\f\v"));
-            s.erase(s.find_last_not_of(" \t\n\r\f\v") + 1); 
-            std::size_t pos1 = s.find(";");
-            
-            if (pos1 != std::string::npos) {
-                s.erase(pos1);
-            }
+            while (!fin.eof()) {
+                std::getline(fin, s);
+                s = s.substr(0, s.find(";", 0));
+                s.erase(0, s.find_first_not_of(" \t\n\r\f\v"));
+                s.erase(s.find_last_not_of(" \t\n\r\f\v") + 1);
+                std::size_t pos1 = s.find(";");
 
-            if (s.size() == 0) {
+                if (pos1 != std::string::npos) {
+                    s.erase(pos1);
+                }
 
-                lines_count++;
-            }
-            else if (s[0] == '[' ) { 
-                if ( s[s.size() - 1] != ']') {
-                    std::cout << "Incorrect syntax --- line " << lines_count << std::endl;
+                if (s.size() == 0) {
+
                     lines_count++;
                 }
-                else { 
-                    s = s.substr(1, s.size() - 2);
-                    parsed_file.insert(std::pair<std::string, std::map<std::string, std::string>>(s, {}));
-                    current_section = s;
-                    lines_count++;
-                }
-            }
-            else {
-                if (current_section != "") {
-                    if (s.find("=") == std::string::npos) {
+                else if (s[0] == '[') {
+                    if (s[s.size() - 1] != ']') {
                         std::cout << "Incorrect syntax --- line " << lines_count << std::endl;
+                        lines_count++;
                     }
-                    else {                      
-                        std::string variable, value;
-
-                        variable = s.substr(0, s.find("=", 0));
-                        value = s.substr(s.find("=") + 1);
-
-                        if (value.size() != 0) {
-                            parsed_file.at(current_section)[variable] = value;
-                        }
-                    }   
-                    lines_count++;
+                    else {
+                        s = s.substr(1, s.size() - 2);
+                        parsed_file.insert(std::pair<std::string, std::map<std::string, std::string>>(s, {}));
+                        current_section = s;
+                        lines_count++;
+                    }
                 }
                 else {
-                    std::cout << "Incorrect syntax --- line " << lines_count << std::endl;
-                    lines_count++;
-                }   
+                    if (current_section != "") {
+                        if (s.find("=") == std::string::npos) {
+                            std::cout << "Incorrect syntax --- line " << lines_count << std::endl;
+                        }
+                        else {
+                            std::string variable, value;
+
+                            variable = s.substr(0, s.find("=", 0));
+                            value = s.substr(s.find("=") + 1);
+
+                            if (value.size() != 0) {
+                                parsed_file.at(current_section)[variable] = value;
+                            }
+                        }
+                        lines_count++;
+                    }
+                    else {
+                        std::cout << "Incorrect syntax --- line " << lines_count << std::endl;
+                        lines_count++;
+                    }
+                }
             }
-        }
-        fin.close();
-        
-        std::cout << " Parsed file " << std::endl;
-        
-        for (const auto& elem : parsed_file) {
-            std::cout << elem.first << ": " << std::endl;
-            for (const auto& elem2 : elem.second) {
-                std::cout << "    ---- " << elem2.first << " : " << elem2.second << std::endl;
+            fin.close();
+
+            std::cout << " - Parsed file - " << std::endl;
+
+            for (const auto& elem : parsed_file) {
+                std::cout << elem.first << ": " << std::endl;
+                for (const auto& elem2 : elem.second) {
+                    std::cout << "    " << elem2.first << " : " << elem2.second << std::endl;
+                }
             }
-        }
+            std::cout << " - - - - - " << std::endl;
     }
     ~ini_parser() {}
 
@@ -154,8 +163,9 @@ int ini_parser::get_value(std::string input) {
     try {
         res = std::stoi(tmp_res, &sz);
     }
-    catch (...) {
-        std::cout << "Value isn't number" << std::endl;
+    catch (std::exception& e) {
+        std::cout << e.what() << std::endl;
+        throw WrongVariableValue();
     }
 
     return res;
@@ -170,8 +180,9 @@ float ini_parser::get_value(std::string input) {
     try {
         res = std::stof(tmp_res, &sz);
     }
-    catch (...) {
-        std::cout << "Value isn't number" << std::endl;
+    catch (std::exception& e) {
+        std::cout << e.what() << std::endl;
+        throw WrongVariableValue();
     }
     return res;
 }
@@ -185,8 +196,9 @@ double ini_parser::get_value(std::string input) {
     try {
         res = std::stod(tmp_res, &sz);
     }
-    catch (...) {
-        std::cout << "Value isn't number" << std::endl;
+    catch (std::exception& e) {
+        std::cout << e.what() << std::endl;
+        throw WrongVariableValue();
     }
     return res;
 }
@@ -196,13 +208,13 @@ int main()
     SetConsoleCP(CP_UTF8);
     SetConsoleOutputCP(CP_UTF8);
 
-
-    ini_parser parser("filename.ini");
-
     try {
-        
+        ini_parser parser("filename.ini");
         auto value = parser.get_value<double>("Section1.var1");
         std::cout << "\n value is " << value << std::endl;
+    }
+    catch (const FileOpeningProblem& ex) {
+        std::cout << ex.what() << std::endl;
     }
     catch (const WrongInput& ex) {
         std::cout << ex.what() << std::endl;
@@ -214,6 +226,9 @@ int main()
         std::cout << ex.what() << std::endl;
     }    
     catch (const WrongFile& ex) {
+        std::cout << ex.what() << std::endl;
+    }
+    catch (const WrongVariableValue& ex) {
         std::cout << ex.what() << std::endl;
     }
 }
