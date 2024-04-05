@@ -176,6 +176,21 @@ float ini_parser::get_value(std::string input) {
     return res;
 }
 
+template<>
+double ini_parser::get_value(std::string input) {
+    float res = 0;
+    std::string tmp_res = get_value_string(input);
+    size_t sz;
+
+    try {
+        res = std::stod(tmp_res, &sz);
+    }
+    catch (...) {
+        std::cout << "Value isn't number" << std::endl;
+    }
+    return res;
+}
+
 int main()
 {
     SetConsoleCP(CP_UTF8);
@@ -185,9 +200,8 @@ int main()
     ini_parser parser("filename.ini");
 
     try {
-        auto value = parser.get_value<std::string>("Section1.var3");
-        //auto value = parser.get_value<int>("Section1.var7");
-        //auto value = parser.get_value<float>("Section1.var1");
+        
+        auto value = parser.get_value<double>("Section1.var1");
         std::cout << "\n value is " << value << std::endl;
     }
     catch (const WrongInput& ex) {
